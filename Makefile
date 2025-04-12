@@ -19,6 +19,6 @@ uninstall:
 	rm -f ${DESTDIR}${PREFIX}/bin/herbe
 
 clean:
-	rm -f herbe
+	rm -f herbe *.rej *.orig
 
 .PHONY: all install uninstall clean
