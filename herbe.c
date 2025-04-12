@@ -9,6 +9,12 @@
 #include <fcntl.h>
 #include <semaphore.h>
 #include <poll.h>
+#include <sys/file.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <unistd.h>
+#include <errno.h>
+#include <mqueue.h>
 
 #include "config.h"
 
@@ -23,6 +29,14 @@ int num_of_lines;
 char **lines;
 static int exit_code = EXIT_DISMISS;
 static volatile sig_atomic_t sig_recieved;
+
+struct mq_object {
+	pid_t pid;
+	long timestamp;
+	char  buffer[1024];
+};
+long lastTimestamp;
+
 
 static void die(const char *format, ...)
 {
@@ -115,9 +129,55 @@ void constructLines(char* strList[], int numberOfStrings) {
 	}
 }
 
+void reload(union sigval sv);
+void readAllEvents(mqd_t mqd) {
+	struct sigevent event = {.sigev_notify=SIGEV_THREAD, .sigev_signo=SIGHUP, .sigev_value.sival_int=mqd, .sigev_notify_function=reload};
+
+	if(mq_notify(mqd, &event) == -1) {
+		perror("mq_notify failed");
+		exit(1);
+	}
+
+	struct mq_object object;
+
+	while(1) {
+		int ret = mq_receive(mqd, (char*)&object, sizeof(object), NULL);
+		if(ret==-1) {
+			if(errno == EAGAIN)
+				return;
+			perror("mq_receive");
+			exit(1);
+		}
+		if(object.timestamp && lastTimestamp > object.timestamp)
+			return;
+		if(object.timestamp)
+			lastTimestamp = object.timestamp;
+		char *buffer = object.buffer;
+
+		constructLines(&buffer, 1);
+		kill(object.pid, SIGTERM);
+	}
+}
+void reload(union sigval sv) {
+	// we've already timed out
+	if(alarm(duration) == 0)
+		return;
+	readAllEvents(sv.sival_int);
+	XEvent event;
+	event.type = Expose;
+	XSendEvent(display, window, 0, 0, &event);
+	XFlush(display);
+}
+
+
 static void expire(int sig)
 {
 	sig_recieved = sig_recieved ? sig_recieved : sig;
+}
+
+
+void exitSuccess() {
+       exit(0);
 }
 
 int main(int argc, char *argv[])
@@ -126,6 +186,44 @@ int main(int argc, char *argv[])
 	{
 		sem_unlink("/herbe");
 		die("Usage: %s body", argv[0]);
+	}
+
+	const char* id =getenv("HERBE_ID");
+	mqd_t mqd=-1;
+	if(id) {
+		struct mq_attr attr = { .mq_maxmsg = 10, .mq_msgsize = sizeof(struct mq_object) };
+		mqd = mq_open(id, O_RDWR|O_CREAT|O_NONBLOCK, 0722, &attr);
+		if(mqd==-1){
+			perror("mq_open");
+			die("mq_open");
+		}
+		while (1) {
+			if(flock(mqd, LOCK_EX|LOCK_NB) == 0) {
+				// if we get the lock, register for events
+				break;
+			}
+			if(errno != EWOULDBLOCK) {
+				perror("flock");
+				exit(1);
+			}
+			// someone else is listening for events
+			char* ts_str = getenv("NOTIFICATION_ID");
+			lastTimestamp = ts_str?atol(ts_str):0;
+			struct mq_object object = {getpid(), lastTimestamp, {0}};
+			char *buffer=object.buffer;
+			for(int i=1;i<argc;i++) {
+				strcat(buffer, argv[i]);
+				strcat(buffer, "\n");
+			}
+			signal(SIGTERM, exitSuccess);
+			if(mq_send(mqd, (char*)&object, sizeof(object), 1)==-1) {
+				perror("mq_send");
+				exit(1);
+			}
+			signal(SIGALRM, SIG_IGN);
+			alarm(1);
+			pause();
+		}
 	}
 
 	struct sigaction act_expire, act_ignore;
@@ -202,6 +300,10 @@ int main(int argc, char *argv[])
 	if (duration != 0)
 		alarm(duration);
 
+	if(id) {
+		readAllEvents(mqd);
+	}
+
 	for (;;)
 	{
 		XEvent event;
@@ -249,6 +351,10 @@ int main(int argc, char *argv[])
 	XftColorFree(display, visual, colormap, &color);
 	XftFontClose(display, font);
 	XCloseDisplay(display);
+
+	if(id) {
+		mq_close(mqd);
+	}
 
 	return exit_code;
 }
