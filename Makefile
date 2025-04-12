@@ -1,5 +1,5 @@
-CFLAGS = -Wall -Wextra -pedantic -lX11 -lXft -I/usr/include/freetype2 -pthread
-CFLAGS += -lrt
+CFLAGS = -Wall -Wextra -pedantic -I/usr/include/freetype2
+LDFLAGS = -lX11 -lXft -lfontconfig -lpthread -lrt
 
 PREFIX ?= /usr/local
 CC ?= cc
@@ -9,8 +9,8 @@ all: herbe
 config.h: config.def.h
 	cp config.def.h config.h
 
-herbe: herbe.c config.h Makefile
-	$(CC) herbe.c $(CFLAGS) -o herbe
+herbe: herbe.c fontutil.c fontutil.h config.h Makefile
+	$(CC) $(CFLAGS) herbe.c fontutil.c -o herbe $(LDFLAGS)
 
 install: herbe
 	mkdir -p ${DESTDIR}${PREFIX}/bin

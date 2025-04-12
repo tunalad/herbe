@@ -16,6 +16,7 @@
 #include <mqueue.h>
 
 #include "config.h"
+#include "fontutil.h"
 
 #define EXIT_ACTION 0
 #define EXIT_FAIL 1
@@ -23,6 +24,7 @@
 
 static Display *display;
 XftFont *font;
+FontSet *fontset;
 static Window window;
 int num_of_lines;
 char **lines;
@@ -110,7 +112,8 @@ void constructLines(char* strList[], int numberOfStrings) {
 
 	for (int i = 0; i < numberOfStrings; i++)
 	{
-		for (unsigned int eol = get_max_len(strList[i], font, max_text_width); eol; strList[i] += eol, num_of_lines++, eol = get_max_len(strList[i], font, max_text_width))
+		for (unsigned int eol = get_max_len(strList[i], font, max_text_width); eol;
+				strList[i] += eol, num_of_lines++, eol = get_max_len(strList[i], font, max_text_width))
 		{
 			if (lines_size <= num_of_lines)
 			{
@@ -272,7 +275,11 @@ int main(int argc, char *argv[])
 	if (!XftColorAllocName(display, visual, colormap, border_color, &color))
 		die("Failed to allocate border color");
 	attributes.border_pixel = color.pixel;
-	font = XftFontOpenName(display, screen, font_pattern);
+
+	fontset = init_fontset(display, screen, font_pattern, sizeof(font_pattern) / sizeof(font_pattern[0]));
+	if (!fontset)
+		die("Failed to initialize fonts");
+	font = get_primary_font(fontset); // Set global font to primary font for measurements
 
 
 	constructLines(argv+1, argc-1);
@@ -337,8 +344,9 @@ int main(int argc, char *argv[])
 		{
 			XClearWindow(display, window);
 			for (int i = 0; i < num_of_lines; i++)
-				XftDrawStringUtf8(draw, &color, font, padding, line_spacing * i + text_height * (i + 1) + padding,
-								  (FcChar8 *)lines[i], strlen(lines[i]));
+				draw_text(display, draw, &color, fontset,
+						padding, line_spacing * i + text_height * (i + 1) + padding,
+						lines[i], strlen(lines[i]));
 		}
 		else if (event.type == ButtonPress)
 		{
@@ -358,7 +366,7 @@ int main(int argc, char *argv[])
 
 	XftDrawDestroy(draw);
 	XftColorFree(display, visual, colormap, &color);
-	XftFontClose(display, font);
+	free_fontset(display, fontset);
 	XCloseDisplay(display);
 
 	if(id) {
