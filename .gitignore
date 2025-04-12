@@ -1,3 +1,6 @@
 herbe
 config.h
 .ccls-cache
+*.orig
+*.rej
+*.diff

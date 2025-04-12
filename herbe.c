@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <fcntl.h>
 #include <semaphore.h>
+#include <poll.h>
 
 #include "config.h"
 
@@ -15,9 +16,10 @@
 #define EXIT_FAIL 1
 #define EXIT_DISMISS 2
 
-Display *display;
-Window window;
-int exit_code = EXIT_DISMISS;
+static Display *display;
+static Window window;
+static int exit_code = EXIT_DISMISS;
+static volatile sig_atomic_t sig_recieved;
 
 static void die(const char *format, ...)
 {
@@ -29,7 +31,7 @@ static void die(const char *format, ...)
 	exit(EXIT_FAIL);
 }
 
-int get_max_len(char *string, XftFont *font, int max_text_width)
+static int get_max_len(char *string, XftFont *font, int max_text_width)
 {
 	int eol = strlen(string);
 	XGlyphInfo info;
@@ -56,6 +58,9 @@ int get_max_len(char *string, XftFont *font, int max_text_width)
 			return ++i;
 		}
 
+	while (eol && (string[eol] & 0xC0) == 0x80)
+		--eol;
+
 	if (info.width <= max_text_width)
 		return eol;
 
@@ -70,13 +75,9 @@ int get_max_len(char *string, XftFont *font, int max_text_width)
 		return ++eol;
 }
 
-void expire(int sig)
+static void expire(int sig)
 {
-	XEvent event;
-	event.type = ButtonPress;
-	event.xbutton.button = (sig == SIGUSR2) ? (ACTION_BUTTON) : (DISMISS_BUTTON);
-	XSendEvent(display, window, 0, 0, &event);
-	XFlush(display);
+	sig_recieved = sig_recieved ? sig_recieved : sig;
 }
 
 int main(int argc, char *argv[])
@@ -115,11 +116,14 @@ int main(int argc, char *argv[])
 	int screen_height = DisplayHeight(display, screen);
 
 	XSetWindowAttributes attributes;
+	attributes.event_mask = ExposureMask | ButtonPressMask;
 	attributes.override_redirect = True;
 	XftColor color;
-	XftColorAllocName(display, visual, colormap, background_color, &color);
+	if (!XftColorAllocName(display, visual, colormap, background_color, &color))
+		die("Failed to allocate background color");
 	attributes.background_pixel = color.pixel;
-	XftColorAllocName(display, visual, colormap, border_color, &color);
+	if (!XftColorAllocName(display, visual, colormap, border_color, &color))
+		die("Failed to allocate border color");
 	attributes.border_pixel = color.pixel;
 
 	int num_of_lines = 0;
@@ -130,6 +134,8 @@ int main(int argc, char *argv[])
 		die("malloc failed");
 
 	XftFont *font = XftFontOpenName(display, screen, font_pattern);
+	if (!font)
+		die("Couldn't open font");
 
 	for (int i = 1; i < argc; i++)
 	{
@@ -163,15 +169,18 @@ int main(int argc, char *argv[])
 		y = screen_height - height - border_size * 2 - pos_y;
 
 	window = XCreateWindow(display, RootWindow(display, screen), x, y, width, height, border_size, DefaultDepth(display, screen),
-						   CopyFromParent, visual, CWOverrideRedirect | CWBackPixel | CWBorderPixel, &attributes);
+						   CopyFromParent, visual, CWOverrideRedirect | CWBackPixel | CWBorderPixel | CWEventMask, &attributes);
 
 	XftDraw *draw = XftDrawCreate(display, window, visual, colormap);
+	if (!draw)
+		die("Failed to create Xft drawable object");
 	XftColorAllocName(display, visual, colormap, font_color, &color);
 
-	XSelectInput(display, window, ExposureMask | ButtonPress);
 	XMapWindow(display, window);
 
 	sem_t *mutex = sem_open("/herbe", O_CREAT, 0644, 1);
+	if (mutex == SEM_FAILED)
+		die("Failed to open semaphore");
 	sem_wait(mutex);
 
 	sigaction(SIGUSR1, &act_expire, 0);
@@ -183,7 +192,21 @@ int main(int argc, char *argv[])
 	for (;;)
 	{
 		XEvent event;
-		XNextEvent(display, &event);
+		struct pollfd pfd = {
+			.fd = ConnectionNumber(display),
+			.events = POLLIN,
+		};
+		int pending = XPending(display) > 0 || poll(&pfd, 1, -1) > 0;
+
+		if (sig_recieved)
+		{
+			exit_code = sig_recieved == SIGUSR2 ? EXIT_ACTION : EXIT_DISMISS;
+			break;
+		}
+		else if (pending)
+			XNextEvent(display, &event);
+		else
+			continue;
 
 		if (event.type == Expose)
 		{
