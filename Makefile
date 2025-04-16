@@ -9,7 +9,7 @@ all: herbe
 config.h: config.def.h
 	cp config.def.h config.h
 
-herbe: herbe.c fontutil.c fontutil.h config.h Makefile
+herbe: herbe.c herbe.h fontutil.c fontutil.h config.h Makefile
 	$(CC) $(CFLAGS) herbe.c fontutil.c -o herbe $(LDFLAGS)
 
 install: herbe
