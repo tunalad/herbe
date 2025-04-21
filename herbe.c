@@ -39,8 +39,10 @@ long lastTimestamp;
 const char herbe_usage_string[] =
 "herbe [OPTION...] <BODY>\n"
 "Options:\n"
-"    -h\t\tThis help text\n"
-"    -v\t\tPrints current version";
+"    -h        This help text\n"
+"    -v        Prints current version\n"
+"    -t TIME   Set notification duration to TIME seconds"
+;
 
 static void print_version(void)
 {
@@ -50,8 +52,8 @@ static void print_version(void)
 static void print_help(void)
 {
 	print_version();
-	printf("Usage: %s\n\n", herbe_usage_string);
-	exit(0);
+	printf("Usage: %s\n", herbe_usage_string);
+	exit(EXIT_ACTION);
 }
 
 static void usage(const char *err)
@@ -72,30 +74,64 @@ static void die(const char *format, ...)
 
 static int handle_options(const char ***argv, int *argc)
 {
-	const char **orig_argv = *argv;
+    int skip_next_arg = 0;
+    int param_count = 0;
 
-	while (*argc > 0) {
-		const char *cmd = (*argv)[0];
-		if (cmd[0] != '-')
-			break;
+    char **argv_in = (char **) *argv;	// original argv
+    char **argv_out = argv_in;			// trimmed argv
 
-		if (!strcmp(cmd, "-h")) {
-			print_help();
-		}
-		else if (!strcmp(cmd, "-v")) {
-			print_version();
-			exit(0);
-		}
-		else {
-			fprintf(stderr, "Unknown option: %s\n", cmd);
-			usage(herbe_usage_string);
-		}
+    for (int i = 0; i < *argc; i++) {
+        const char *arg = argv_in[i];
 
-		(*argv)++;
-		(*argc)--;
-	}
-	return (*argv) - orig_argv;
+        if (skip_next_arg) {
+            skip_next_arg = 0;
+            continue;
+        }
+
+        if (arg && arg[0] == '-') {
+            if (!strcmp(arg, "-h")) {
+                print_help();
+                continue;
+            } else if (!strcmp(arg, "-v")) {
+                print_version();
+                exit(EXIT_ACTION);
+            }
+
+			// options with params
+            if (i + 1 < *argc && argv_in[i + 1] && argv_in[i + 1][0] != '-') {
+                skip_next_arg = 1;
+
+				// time duration option
+				if (!strcmp(arg, "-t")) {
+					char *endptr;
+					errno = 0;
+					long val = strtol(argv_in[i + 1], &endptr, 10);
+
+					// making sure it's a number
+					if (*endptr != '\0' || errno == ERANGE || val <= 0) {
+						fprintf(stderr, "Error: -t requires a positive whole number\n");
+						exit(EXIT_FAIL);
+					}
+					duration = (int)val;
+				}
+
+				// TODO: -r to change notification ID (instead of using HERBE_ID variable)
+				// TODO: -u to set urgency leve (will be customizable via config.h file). Just a visual thing ig?
+				// TODO: -i to set icons
+				// TODO: -h hints thing. Only usage I know for it is the percentage bar? will have to use --help for help option later
+            }
+            continue; // skip option
+        }
+
+        // copy valid non-option argument
+        *argv_out++ = argv_in[i];
+        param_count++;
+    }
+
+    *argv_out = NULL;
+    return *argc = param_count;
 }
+
 
 static int get_max_len(char *string, XftFont *font, int max_text_width)
 {
@@ -185,7 +221,7 @@ void readAllEvents(mqd_t mqd) {
 
 	if(mq_notify(mqd, &event) == -1) {
 		perror("mq_notify failed");
-		exit(1);
+		exit(EXIT_FAIL);
 	}
 
 	struct mq_object object;
@@ -196,7 +232,7 @@ void readAllEvents(mqd_t mqd) {
 			if(errno == EAGAIN)
 				return;
 			perror("mq_receive");
-			exit(1);
+			exit(EXIT_FAIL);
 		}
 		if(object.timestamp && lastTimestamp > object.timestamp)
 			return;
@@ -227,7 +263,7 @@ static void expire(int sig)
 
 
 void exitSuccess() {
-       exit(0);
+       exit(EXIT_ACTION);
 }
 
 void read_y_offset(unsigned int **offset, int *id) {
@@ -251,7 +287,6 @@ int main(int argc, char *argv[])
 		usage(herbe_usage_string);
 
 	/* Look for flags.. */
-    av++;
     handle_options(&av, &argc);
 
 	const char* id =getenv("HERBE_ID");
@@ -270,7 +305,7 @@ int main(int argc, char *argv[])
 			}
 			if(errno != EWOULDBLOCK) {
 				perror("flock");
-				exit(1);
+				exit(EXIT_FAIL);
 			}
 			// someone else is listening for events
 			char* ts_str = getenv("NOTIFICATION_ID");
@@ -284,7 +319,7 @@ int main(int argc, char *argv[])
 			signal(SIGTERM, exitSuccess);
 			if(mq_send(mqd, (char*)&object, sizeof(object), 1)==-1) {
 				perror("mq_send");
-				exit(1);
+				exit(EXIT_FAIL);
 			}
 			signal(SIGALRM, SIG_IGN);
 			alarm(1);

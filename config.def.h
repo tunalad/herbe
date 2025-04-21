@@ -14,7 +14,7 @@ static const unsigned int pos_y = 55;
 enum corners { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT };
 enum corners corner = TOP_RIGHT;
 
-static const unsigned int duration = 5; /* in seconds */
+static int duration = 5; /* in seconds */
 
 #define DISMISS_BUTTON Button1
 #define ACTION_BUTTON Button3
