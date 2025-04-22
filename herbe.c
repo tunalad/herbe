@@ -41,7 +41,8 @@ const char herbe_usage_string[] =
 "Options:\n"
 "    -h        This help text\n"
 "    -v        Prints current version\n"
-"    -t TIME   Set notification duration to TIME seconds"
+"    -t TIME   Set notification duration to TIME seconds\n"
+"    -u LEVEL  Set the urgency level (low, normal, critical)."
 ;
 
 static void print_version(void)
@@ -92,7 +93,8 @@ static int handle_options(const char ***argv, int *argc)
             if (!strcmp(arg, "-h")) {
                 print_help();
                 continue;
-            } else if (!strcmp(arg, "-v")) {
+			}
+            if (!strcmp(arg, "-v")) {
                 print_version();
                 exit(EXIT_ACTION);
             }
@@ -113,10 +115,27 @@ static int handle_options(const char ***argv, int *argc)
 						exit(EXIT_FAIL);
 					}
 					duration = (int)val;
+					// TODO: support -1 for infinite time
+				}
+
+				if (!strcmp(arg, "-u")) {
+					char *val = argv_in[i + 1];
+
+					// making sure it's a number
+					if (strcasecmp(val, "low") != 0 && strcasecmp(val, "normal") != 0 && strcasecmp(val, "critical") != 0) {
+						fprintf(stderr, "Unknown urgency '%s' specified. Known urgency levels are: low, normal, critical.\n", val);
+						exit(EXIT_FAIL);
+					}
+
+					printf("Urgency is '%s'. Do urgency stuff now xd\n", val);
+
+					// TODO: implement urgencies
+					// normal is default stuff
+					// low is darker style of notification
+					// critical is all red, also stays forever until clicked onto it
 				}
 
 				// TODO: -r to change notification ID (instead of using HERBE_ID variable)
-				// TODO: -u to set urgency leve (will be customizable via config.h file). Just a visual thing ig?
 				// TODO: -i to set icons
 				// TODO: -h hints thing. Only usage I know for it is the percentage bar? will have to use --help for help option later
             }
