@@ -156,7 +156,6 @@ static int handle_options(const char ***argv, int *argc)
 				if (!strcmp(arg, "-r")) {
 					char *val = argv_in[i + 1];
 
-					printf("%s\n", val);
 					herbe_id = val;
 
 				}
@@ -172,7 +171,6 @@ static int handle_options(const char ***argv, int *argc)
     *argv_out = NULL;
     return *argc = param_count;
 }
-
 
 static int get_max_len(char *string, XftFont *font, int max_text_width)
 {
@@ -320,6 +318,25 @@ void free_y_offset(int id) {
     shmctl(id, IPC_RMID, NULL);
 }
 
+char *process_mqueue_id(const char *raw_id) {
+    if (!raw_id) {
+        return NULL;
+    }
+
+	// prepending `/` if there's none
+    if (raw_id[0] != '/') {
+        char *new_id = malloc(strlen(raw_id) + 2);
+        if (!new_id) {
+            fprintf(stderr, "Failed to allocate memory for id processing\n");
+            exit(EXIT_FAIL);
+        }
+        snprintf(new_id, strlen(raw_id) + 2, "/%s", raw_id);
+        return new_id;
+    }
+
+    return strdup(raw_id);
+}
+
 int main(int argc, char *argv[])
 {
 	const char **av = (const char **) argv;
@@ -336,6 +353,8 @@ int main(int argc, char *argv[])
 
 	if (!id)
 		id = herbe_id;
+
+	id = process_mqueue_id(id);
 
 	mqd_t mqd=-1;
 
