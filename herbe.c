@@ -41,6 +41,9 @@ typedef struct {
 	const char font_color[8];
 } NotificationStyle;
 
+
+enum schemes { SchemeNorm, SchemeLow, SchemeCrit};
+
 #include "config.h"
 
 const NotificationStyle *herbe_style;
@@ -139,10 +142,10 @@ static int handle_options(const char ***argv, int *argc)
 					}
 
 					if (strcasecmp(val, "low") == 0) {
-						herbe_style = &herbe_low;
+						herbe_style = &herbe_colors[SchemeLow];
 					}
 					if (strcasecmp(val, "critical") == 0) {
-						herbe_style = &herbe_critical;
+						herbe_style = &herbe_colors[SchemeCrit];
 						duration = 0;
 					}
 				}
@@ -310,8 +313,7 @@ int main(int argc, char *argv[])
 {
 	const char **av = (const char **) argv;
 
-	//NotificationStyle *herbe_style = &herbe_normal;
-	herbe_style = &herbe_normal;
+	herbe_style = &herbe_colors[SchemeNorm];
 
 	if (argc == 1)
 		usage(herbe_usage_string);

@@ -1,11 +1,4 @@
-//static const char *background_color = "#3e3e3e";
-//static const char *border_color = "#ececec";
-//static const char *font_color = "#ececec";
-/*                                                background     border      font */
-static const NotificationStyle herbe_normal =   { "#285577",    "#ececec",  "#ffffff" };
-static const NotificationStyle herbe_low =      { "#3e3e3e",    "#ececec",  "#ffffff" };
-static const NotificationStyle herbe_critical = { "#900000",    "#ff0000",  "#ffffff" };
-//static const char *font_pattern = "monospace:size=8";
+/* appearance */
 static const char *font_pattern[] = { "DejaVu Sans Mono:size=8", "Joypixels:size=8", "DejaVuSansM Nerd Font Propo:size=8", "monospace:size=8" };
 static const unsigned line_spacing = 5;
 static const unsigned int padding = 8;
@@ -14,6 +7,13 @@ static const unsigned int width = 300;
 static const unsigned int border_size = 2;
 static const unsigned int pos_x = 15;
 static const unsigned int pos_y = 55;
+
+static const NotificationStyle herbe_colors[] = {
+    /*                  bg          border      fg      */
+    [SchemeNorm]    = { "#285577",  "#ececec",  "#ffffff" },
+    [SchemeLow]     = { "#3e3e3e",  "#ececec",  "#ffffff" },
+    [SchemeCrit]    = { "#900000",  "#ff0000",  "#ffffff" },
+};
 
 enum corners { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT };
 enum corners corner = TOP_RIGHT;
