@@ -47,16 +47,18 @@ enum schemes { SchemeNorm, SchemeLow, SchemeCrit};
 #include "config.h"
 
 const NotificationStyle *herbe_style;
+const char *herbe_id;
 
 long lastTimestamp;
 
 const char herbe_usage_string[] =
 "herbe [OPTION...] <BODY>\n"
 "Options:\n"
-"    -h        This help text\n"
-"    -v        Prints current version\n"
-"    -t TIME   Set notification duration to TIME seconds\n"
-"    -u LEVEL  Set the urgency level (low, normal, critical)."
+"    -h				This help text.\n"
+"    -u LEVEL  		Set the urgency level (low, normal, critical).\n"
+"    -t TIME   		Set notification duration to TIME seconds.\n"
+"	 -r HERBE_ID	The ID of the notification to replace.\n"
+"    -v				Prints current version."
 ;
 
 static void print_version(void)
@@ -129,9 +131,9 @@ static int handle_options(const char ***argv, int *argc)
 						exit(EXIT_FAIL);
 					}
 					duration = (int)val;
-					// TODO: support -1 for infinite time
 				}
 
+				// urgeny level
 				if (!strcmp(arg, "-u")) {
 					char *val = argv_in[i + 1];
 
@@ -148,6 +150,15 @@ static int handle_options(const char ***argv, int *argc)
 						herbe_style = &herbe_colors[SchemeCrit];
 						duration = 0;
 					}
+				}
+
+				// notification id replacing
+				if (!strcmp(arg, "-r")) {
+					char *val = argv_in[i + 1];
+
+					printf("%s\n", val);
+					herbe_id = val;
+
 				}
             }
             continue; // skip option
@@ -321,8 +332,13 @@ int main(int argc, char *argv[])
 	/* Look for flags.. */
     handle_options(&av, &argc);
 
-	const char* id =getenv("HERBE_ID");
+	char* id = getenv("HERBE_ID");
+
+	if (!id)
+		id = herbe_id;
+
 	mqd_t mqd=-1;
+
 	if(id) {
 		struct mq_attr attr = { .mq_maxmsg = 10, .mq_msgsize = sizeof(struct mq_object) };
 		mqd = mq_open(id, O_RDWR|O_CREAT|O_NONBLOCK, 0722, &attr);
