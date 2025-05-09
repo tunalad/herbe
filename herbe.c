@@ -15,7 +15,6 @@
 #include <errno.h>
 #include <mqueue.h>
 
-#include "config.h"
 #include "fontutil.h"
 
 #include "herbe.h"
@@ -34,6 +33,18 @@ struct mq_object {
 	long timestamp;
 	char  buffer[1024];
 };
+
+typedef struct {
+	// lmiting to 7 because #RRGGBB
+	const char background_color[8];
+	const char border_color[8];
+	const char font_color[8];
+} NotificationStyle;
+
+#include "config.h"
+
+const NotificationStyle *herbe_style;
+
 long lastTimestamp;
 
 const char herbe_usage_string[] =
@@ -110,8 +121,8 @@ static int handle_options(const char ***argv, int *argc)
 					long val = strtol(argv_in[i + 1], &endptr, 10);
 
 					// making sure it's a number
-					if (*endptr != '\0' || errno == ERANGE || val <= 0) {
-						fprintf(stderr, "Error: -t requires a positive whole number\n");
+					if (*endptr != '\0' || errno == ERANGE) {
+						fprintf(stderr, "Error: -t requires a whole number\n");
 						exit(EXIT_FAIL);
 					}
 					duration = (int)val;
@@ -127,17 +138,14 @@ static int handle_options(const char ***argv, int *argc)
 						exit(EXIT_FAIL);
 					}
 
-					printf("Urgency is '%s'. Do urgency stuff now xd\n", val);
-
-					// TODO: implement urgencies
-					// normal is default stuff
-					// low is darker style of notification
-					// critical is all red, also stays forever until clicked onto it
+					if (strcasecmp(val, "low") == 0) {
+						herbe_style = &herbe_low;
+					}
+					if (strcasecmp(val, "critical") == 0) {
+						herbe_style = &herbe_critical;
+						duration = 0;
+					}
 				}
-
-				// TODO: -r to change notification ID (instead of using HERBE_ID variable)
-				// TODO: -i to set icons
-				// TODO: -h hints thing. Only usage I know for it is the percentage bar? will have to use --help for help option later
             }
             continue; // skip option
         }
@@ -281,7 +289,7 @@ static void expire(int sig)
 }
 
 
-void exitSuccess() {
+void exitSuccess(int _) {
        exit(EXIT_ACTION);
 }
 
@@ -301,6 +309,9 @@ void free_y_offset(int id) {
 int main(int argc, char *argv[])
 {
 	const char **av = (const char **) argv;
+
+	//NotificationStyle *herbe_style = &herbe_normal;
+	herbe_style = &herbe_normal;
 
 	if (argc == 1)
 		usage(herbe_usage_string);
@@ -377,10 +388,10 @@ int main(int argc, char *argv[])
 	attributes.event_mask = ExposureMask | ButtonPressMask;
 	attributes.override_redirect = True;
 	XftColor color;
-	if (!XftColorAllocName(display, visual, colormap, background_color, &color))
+	if (!XftColorAllocName(display, visual, colormap, herbe_style->background_color, &color))
 		die("Failed to allocate background color");
 	attributes.background_pixel = color.pixel;
-	if (!XftColorAllocName(display, visual, colormap, border_color, &color))
+	if (!XftColorAllocName(display, visual, colormap, herbe_style->border_color, &color))
 		die("Failed to allocate border color");
 	attributes.border_pixel = color.pixel;
 
@@ -415,7 +426,7 @@ int main(int argc, char *argv[])
 	XftDraw *draw = XftDrawCreate(display, window, visual, colormap);
 	if (!draw)
 		die("Failed to create Xft drawable object");
-	XftColorAllocName(display, visual, colormap, font_color, &color);
+	XftColorAllocName(display, visual, colormap, herbe_style->font_color, &color);
 
 	XMapWindow(display, window);
 
