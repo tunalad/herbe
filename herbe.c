@@ -47,18 +47,19 @@ enum schemes { SchemeNorm, SchemeLow, SchemeCrit};
 #include "config.h"
 
 const NotificationStyle *herbe_style;
-const char *herbe_id;
+char *herbe_id;
 
 long lastTimestamp;
 
 const char herbe_usage_string[] =
 "herbe [OPTION...] <BODY>\n"
 "Options:\n"
-"    -h				This help text.\n"
-"    -u LEVEL  		Set the urgency level (low, normal, critical).\n"
-"    -t TIME   		Set notification duration to TIME seconds.\n"
-"	 -r HERBE_ID	The ID of the notification to replace.\n"
-"    -v				Prints current version."
+"    -h             This help text.\n"
+"    -u LEVEL       Set the urgency level (low, normal, critical).\n"
+"    -t TIME        Set notification duration to TIME seconds.\n"
+"    -r HERBE_ID    The ID of the notification to replace.\n"
+"    -w             Wait for the notification to be closed before exiting.\n"
+"    -v             Prints current version."
 ;
 
 static void print_version(void)
@@ -106,6 +107,7 @@ static int handle_options(const char ***argv, int *argc)
         }
 
         if (arg && arg[0] == '-') {
+			// options WITHOUT params
             if (!strcmp(arg, "-h")) {
                 print_help();
                 continue;
@@ -114,12 +116,15 @@ static int handle_options(const char ***argv, int *argc)
                 print_version();
                 exit(EXIT_ACTION);
             }
+            if (!strcmp(arg, "-w")) {
+				should_wait = 1;
+            }
 
-			// options with params
+			// options WITH params
             if (i + 1 < *argc && argv_in[i + 1] && argv_in[i + 1][0] != '-') {
                 skip_next_arg = 1;
 
-				// time duration option
+				// time duration
 				if (!strcmp(arg, "-t")) {
 					char *endptr;
 					errno = 0;
@@ -157,7 +162,6 @@ static int handle_options(const char ***argv, int *argc)
 					char *val = argv_in[i + 1];
 
 					herbe_id = val;
-
 				}
             }
             continue; // skip option
@@ -337,6 +341,27 @@ char *process_mqueue_id(const char *raw_id) {
     return strdup(raw_id);
 }
 
+void run_in_background(void) {
+	/* this maybe defeats the "daemon-less" thing
+	 * but I am trying to re-create notify-send here
+	 * gotta do what I gotta do, sorry :( */
+	pid_t pid = fork();
+	if (pid < 0) {
+		perror("fork");
+		exit(EXIT_FAILURE);
+	}
+
+	if (pid > 0) {
+		exit(EXIT_SUCCESS);
+	}
+
+	setsid();
+
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+	close(STDERR_FILENO);
+}
+
 int main(int argc, char *argv[])
 {
 	const char **av = (const char **) argv;
@@ -348,6 +373,9 @@ int main(int argc, char *argv[])
 
 	/* Look for flags.. */
     handle_options(&av, &argc);
+
+	if (!should_wait)
+		run_in_background();
 
 	char* id = getenv("HERBE_ID");
 
