@@ -52,14 +52,16 @@ char *herbe_id;
 long lastTimestamp;
 
 const char herbe_usage_string[] =
-"herbe [OPTION...] <BODY>\n"
+"\n"
+"    herbe [OPTION...] <BODY>\n"
+"\n"
 "Options:\n"
-"    -h             This help text.\n"
-"    -u LEVEL       Set the urgency level (low, normal, critical).\n"
-"    -t TIME        Set notification duration to TIME seconds.\n"
-"    -r HERBE_ID    The ID of the notification to replace.\n"
-"    -w             Wait for the notification to be closed before exiting.\n"
-"    -v             Prints current version."
+"    -?, --help                 This help text.\n"
+"    -u, --urgency LEVEL        Set the urgency level (low, normal, critical).\n"
+"    -t, --expire-time TIME     Set notification duration to TIME seconds.\n"
+"    -r, --replace-id HERBE_ID  The ID of the notification to replace.\n"
+"    -w, --wait                 Wait for the notification to be closed before exiting.\n"
+"    -v, --version              Prints current version."
 ;
 
 static void print_version(void)
@@ -69,7 +71,6 @@ static void print_version(void)
 
 static void print_help(void)
 {
-	print_version();
 	printf("Usage: %s\n", herbe_usage_string);
 	exit(EXIT_ACTION);
 }
@@ -90,6 +91,15 @@ static void die(const char *format, ...)
 	exit(EXIT_FAIL);
 }
 
+static int is_option(const char *arg, const char *short_opt, const char *long_opt)
+{
+	if (short_opt && !strcmp(arg, short_opt))
+		return 1;
+	if (long_opt && !strcmp(arg, long_opt))
+		return 1;
+	return 0;
+}
+
 static int handle_options(const char ***argv, int *argc)
 {
     int skip_next_arg = 0;
@@ -108,16 +118,17 @@ static int handle_options(const char ***argv, int *argc)
 
         if (arg && arg[0] == '-') {
 			// options WITHOUT params
-            if (!strcmp(arg, "-h")) {
+            if (is_option(arg, "-?", "--help")) {
                 print_help();
                 continue;
 			}
-            if (!strcmp(arg, "-v")) {
+            if (is_option(arg, "-v", "--version")) {
                 print_version();
                 exit(EXIT_ACTION);
             }
-            if (!strcmp(arg, "-w")) {
+            if (is_option(arg, "-w", "--wait")) {
 				should_wait = 1;
+				continue;
             }
 
 			// options WITH params
@@ -125,7 +136,7 @@ static int handle_options(const char ***argv, int *argc)
                 skip_next_arg = 1;
 
 				// time duration
-				if (!strcmp(arg, "-t")) {
+				if (is_option(arg, "-t", "--expire-time")) {
 					char *endptr;
 					errno = 0;
 					long val = strtol(argv_in[i + 1], &endptr, 10);
@@ -136,10 +147,11 @@ static int handle_options(const char ***argv, int *argc)
 						exit(EXIT_FAIL);
 					}
 					duration = (int)val;
+					continue;
 				}
 
 				// urgeny level
-				if (!strcmp(arg, "-u")) {
+				if (is_option(arg, "-u", "--urgency")) {
 					char *val = argv_in[i + 1];
 
 					// making sure it's a number
@@ -155,14 +167,20 @@ static int handle_options(const char ***argv, int *argc)
 						herbe_style = &herbe_colors[SchemeCrit];
 						duration = 0;
 					}
+					continue;
 				}
 
 				// notification id replacing
-				if (!strcmp(arg, "-r")) {
+				if (is_option(arg, "-r", "--replace-id")) {
 					char *val = argv_in[i + 1];
 
 					herbe_id = val;
+					continue;
 				}
+
+				// if none hit
+				fprintf(stderr, "Unknown option '%s'.\n", arg);
+				exit(EXIT_FAIL);
             }
             continue; // skip option
         }
