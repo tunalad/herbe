@@ -6,20 +6,28 @@
   <img src="https://user-images.githubusercontent.com/24730635/90975811-cd62fd00-e537-11ea-9169-92e68a71d0a0.gif" />
 </p>
 
-This fork has some patches applied and other PRs that fix some stuff.
+This fork builds on top of the original [dudik/herbe](https://github.com/dudik/herbe) with additional features to fully replace `notify-send`:
 
-I also have done some other changes myself and will do a lot more, since I want to completely replace notify-send with herbe. I will probably rename this project later, since it probably won't be as small as it is right now.
+- Urgency levels (low, normal, critical) with different color schemes
+- Configurable timeout via CLI
+- Notification replacement by ID
+- Optional wait mode (run in foreground)
 
 ## Features
 
-- Doesn't run in the background, just displays the notification and exits
+- Doesn't run in the background by default (daemon-less without D-Bus)
 - Configurable through `config.h`
 - [Actions support](#actions)
+- Vertical stacking support
+- Font fallbacking for emoji/unicode support
 - Extensible through [patches](https://github.com/dudik/herbe/pulls?q=is%3Aopen+is%3Apr+label%3Apatch)
 
 ## Table of contents
 
 - [Usage](#usage)
+    - [Command-line options](#command-line-options)
+    - [Examples](#examples)
+    - [Urgency levels](#urgency-levels)
     - [Dismiss a notification](#dismiss-a-notification)
     - [Actions](#actions)
     - [Newlines](#newlines)
@@ -28,23 +36,62 @@ I also have done some other changes myself and will do a lot more, since I want 
     - [Dependencies](#dependencies)
     - [Build](#build)
 - [Configuration](#configuration)
+- [Roadmap / To-Do](#roadmap--to-do)
 
 ## Usage
 
-### Patches
+### Command-line Options
 
-Applied patches:
+| Short | Long | Description |
+|-------|------|-------------|
+| `-u` | `--urgency` | Set urgency level (low, normal, critical) |
+| `-t` | `--expire-time` | Set display duration in seconds |
+| `-r` | `--replace-id` | Set notification ID to replace |
+| `-w` | `--wait` | Wait for notification to close before exiting |
+| `-?` | `--help` | Show help text |
+| `-v` | `--version` | Show version information |
 
-- [dynamically updated the displayed notification](https://github.com/dudik/herbe/pull/25)
-- [Vertical stacking](https://github.com/dudik/herbe/pull/19)
+### Examples
 
-Applied PRs that fixes stuff:
+Display a notification with custom timeout:
 
-- [Various fixes/cleanups](https://github.com/dudik/herbe/pull/39)
-- [don't call signal unsafe functions in sighandler](https://github.com/dudik/herbe/pull/40)
-- [Fix linebreak for unicode symbols](https://github.com/dudik/herbe/pull/47)
-- [Set window masks during window creation](https://github.com/dudik/herbe/pull/29)
-- [Refactoring line parsing code to its own method](https://github.com/dudik/herbe/pull/24)
+```shell
+$ herbe -t 10 "This notification will disappear after 10 seconds"
+```
+
+Display a critical urgency notification (stays until dismissed):
+
+```shell
+$ herbe -u critical "System emergency!"
+```
+
+Override an existing notification by ID:
+
+```shell
+$ herbe -r /myid "Updated content"
+```
+
+Or using the environment variable:
+
+```shell
+$ HERBE_ID=/myid herbe "Updated content"
+```
+
+Wait for the notification to be dismissed (run in foreground):
+
+```shell
+$ herbe -w "I'll block until dismissed"
+```
+
+### Urgency Levels
+
+The `-u` option sets the urgency which affects the notification color:
+
+| Level | Description | Default Color |
+|-------|-------------|----------------|
+| `low` | Low urgency | Dark gray |
+| `normal` | Normal urgency | Blue |
+| `critical` | Critical urgency (stays until dismissed) | Red |
 
 ### Dismiss a notification
 
@@ -95,10 +142,16 @@ $ herbe "$(ps axch -o cmd:15,%cpu --sort=-%cpu | head)"
 
 ### Multiple notifications
 
-Notifications are stacked onto each other. We can override existing notifications by using `HERBE_ID` variables. Here's an example:
+Notifications stack vertically onto each other. You can replace an existing notification by using the same ID:
 
 ```shell
-$ HERBE_ID=/1 ./herbe "First" "This notification will be overriden" & sleep 1 && HERBE_ID=/1 ./herbe "Second" "takes the place" & ./herbe "Third" "and unrelated"
+$ ./herbe -r /1 "First notification" & sleep 1 && ./herbe -r /1 "This replaces the first"
+```
+
+The ID can also be set via the `HERBE_ID` environment variable (the `/` prefix is added automatically if missing):
+
+```shell
+$ HERBE_ID=myid ./herbe "First" & sleep 1 && HERBE_ID=myid ./herbe "Updated"
 ```
 
 ## Installation
@@ -120,8 +173,9 @@ $ sudo xbps-install base-devel libX11-devel libXft-devel fontconfig freetype
 ### Build
 
 ```shell
-$ git clone https://github.com/dudik/herbe
+$ git clone https://github.com/tunalad/herbe
 $ cd herbe
+$ make
 $ sudo make install
 ```
 
@@ -136,3 +190,40 @@ herbe is configured at compile-time by editing `config.h`. Every option should b
 ## Projects with herbe integration
 
 - [qutebrowser](https://qutebrowser.org/) supports showing web notifications via herbe, via the `content.notifications.presenter` setting.
+
+## Roadmap / To-Do
+
+This fork aims to fully replace `notify-send`:
+
+### Implemented
+
+| Option | Status |
+|--------|--------|
+| `-u` / `--urgency` | ✅ Implemented (low, normal, critical) |
+| `-t` / `--expire-time` | ✅ Implemented (in seconds) |
+| `-r` / `--replace-id` | ✅ Implemented |
+| `-w` / `--wait` | ✅ Implemented |
+| `-?` / `--help` | ✅ Implemented |
+| `-v` / `--version` | ✅ Implemented |
+| Summary + Body | ✅ Multiple args = multiple lines |
+| Actions | ✅ Via `&&` pattern |
+
+### Not Yet Implemented
+
+| Option | Status |
+|--------|--------|
+| `-a` / `--app-name` | 🔲 Not implemented |
+| `-A` / `--action` | 🔲 Native action buttons |
+| `-i` / `--icon` | 🔲 Icon support |
+| `-c` / `--category` | 🔲 Category hints |
+| `-h` / `--hint` | 🔲 Custom hints |
+| `-p` / `--print-id` | 🔲 Print notification ID |
+| `--id-fd` | 🔲 Write ID to file descriptor |
+| `-e` / `--transient` | 🔲 Transient notifications |
+
+### Known Differences from notify-send
+
+- Timeout is in **seconds** (not milliseconds)
+- Actions use shell pattern (`cmd && action`) instead of native buttons
+- No D-Bus dependency (X11 only)
+- Compile-time configuration via `config.h`
